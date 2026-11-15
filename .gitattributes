@@ -1,0 +1,13 @@
+# Normalize text files in the repository, then force the working-copy
+# line endings that each file type needs.
+* text=auto
+
+# Shell script: must stay LF or bash on Windows fails with "\r: command not found"
+*.sh text eol=lf
+
+# Batch script: Windows cmd requires CRLF
+*.bat text eol=crlf
+
+# Java sources and documentation: LF everywhere
+*.java text eol=lf
+*.md text eol=lf
