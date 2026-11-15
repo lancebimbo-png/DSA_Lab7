@@ -32,6 +32,8 @@ public class ProductInventoryTest {
         testNegativeQuantityIsRejected();
         testDisplayStockCoversEveryEntry();
         testNullProductCodeIsRejected();
+        testAdjustOfAbsentCodeDoesNotInsert();
+        testBorrowToExactlyZeroIsAccepted();
 
         System.out.println();
         System.out.println("ProductInventoryTest results: " + passed + " passed, " + failed + " failed");
@@ -170,10 +172,15 @@ public class ProductInventoryTest {
                 System.setOut(original);
             }
             String output = captured.toString();
-            check("the output mentions P1", output.contains("P1"));
-            check("the output mentions P2", output.contains("P2"));
-            check("the output shows the quantity for P1", output.contains("5"));
-            check("the output shows the quantity for P2", output.contains("9"));
+            java.util.List<String> lines = new java.util.ArrayList<String>();
+            for (String line : output.split("\\R")) {
+                if (!line.isEmpty()) {
+                    lines.add(line);
+                }
+            }
+            check("one output line per entry", lines.size() == inv.size());
+            check("P1 is printed with its own quantity", lines.contains("P1 -> 5"));
+            check("P2 is printed with its own quantity", lines.contains("P2 -> 9"));
         } catch (UnsupportedOperationException e) {
             check("displayStock implemented", false);
             blocked(e);
@@ -191,6 +198,35 @@ public class ProductInventoryTest {
             check("the inventory holds nothing", inv.size() == 0);
         } catch (UnsupportedOperationException e) {
             check("null-code rejection implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testAdjustOfAbsentCodeDoesNotInsert() {
+        section("P11 - adjustStock on an absent code does not insert");
+        ProductInventory inv = new ProductInventory();
+        try {
+            inv.addProduct("P1", 5);
+            check("adjusting an absent code returns false", !inv.adjustStock("P9", 5));
+            check("the absent code was not inserted", inv.getQuantity("P9") == 0);
+            check("the inventory still holds one product", inv.size() == 1);
+        } catch (UnsupportedOperationException e) {
+            check("adjust-without-insert implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testBorrowToExactlyZeroIsAccepted() {
+        section("P12 - borrowing exactly the stock on hand is accepted");
+        ProductInventory inv = new ProductInventory();
+        try {
+            inv.addProduct("P1", 5);
+            check("borrowing all five units returns true", inv.adjustStock("P1", -5));
+            check("the quantity is exactly 0", inv.getQuantity("P1") == 0);
+            check("the product is still listed", inv.size() == 1);
+            check("borrowing one more unit is rejected", !inv.adjustStock("P1", -1));
+        } catch (UnsupportedOperationException e) {
+            check("zero-boundary guard implemented", false);
             blocked(e);
         }
     }

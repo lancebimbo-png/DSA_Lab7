@@ -16,9 +16,10 @@ import java.util.Map;
  * plus three Part A smoke checks that exercise plain java.util.HashMap and the
  * Student record directly (Workbook Tasks 1-3).
  *
- * Workflow: executed at the TEST checkpoint BEFORE BUILD. The classes under test
- * are stubs whose bodies throw UnsupportedOperationException, so the mandatory
- * cases are expected to FAIL here and to PASS after the approved Build.
+ * Workflow history: at the TEST checkpoint (before Build) the classes under test
+ * were stubs, so the mandatory cases failed; that evidence is in AGENT_LOG.md
+ * section 14. After the approved Build every case here is expected to PASS.
+ * A failing run now means a regression, not an expected result.
  */
 public class LabTestRunner {
 
@@ -172,11 +173,11 @@ public class LabTestRunner {
         try {
             Map<Character, Integer> freq = counter.count("abracadabra");
             check("frequency map has 5 distinct characters", freq.size() == 5);
-            check("'a' counted 5 times", freq.get('a') == 5);
-            check("'b' counted 2 times", freq.get('b') == 2);
-            check("'r' counted 2 times", freq.get('r') == 2);
-            check("'c' counted 1 time", freq.get('c') == 1);
-            check("'d' counted 1 time", freq.get('d') == 1);
+            check("'a' counted 5 times", countOf(freq, 'a') == 5);
+            check("'b' counted 2 times", countOf(freq, 'b') == 2);
+            check("'r' counted 2 times", countOf(freq, 'r') == 2);
+            check("'c' counted 1 time", countOf(freq, 'c') == 1);
+            check("'d' counted 1 time", countOf(freq, 'd') == 1);
             int total = 0;
             for (int value : freq.values()) {
                 total += value;
@@ -251,6 +252,12 @@ public class LabTestRunner {
     }
 
     // --- helpers ---
+
+    /** Count for a character, or -1 when absent, so a missing key is a failed check and not an NPE. */
+    private static int countOf(Map<Character, Integer> freq, char c) {
+        Integer v = freq.get(c);
+        return v == null ? -1 : v;
+    }
 
     private static void section(String name) {
         System.out.println("-- " + name + " --");

@@ -18,7 +18,7 @@ import java.util.Map;
  *       probes, chain walks and tree traversals happen inside {@code HashMap}
  *       and are not observable from outside. Nothing in this file pretends to
  *       count them.</li>
- *   <li><b>elapsedNanos</b> — wall-clock time of the timed region only, taken
+ *   <li><b>elapsedNs</b> — wall-clock time of the timed region only, taken
  *       with {@code System.nanoTime()}. It includes JVM and runtime overhead, so
  *       it measures how long the work took on this machine, <b>not</b> how many
  *       internal operations were performed.</li>
@@ -41,6 +41,8 @@ public class ComplexityAudit {
     private static final int REPEATS = 5;
 
     private static int failed = 0;
+    /** Holds the last snapshot so the JIT cannot discard the timed copy. */
+    private static volatile Object SINK;
 
     public static void main(String[] args) {
         System.out.println("=== ComplexityAudit (Lab 7 - HashMap and Key-Value Structures) ===");
@@ -48,13 +50,19 @@ public class ComplexityAudit {
         System.out.println("Counter definitions:");
         System.out.println("  setup        = work prepared BEFORE the timer starts; never inside elapsedNs");
         System.out.println("  timed work   = the only region the timer covers; named in every row");
-        System.out.println("  apiCalls     = Map method calls issued INSIDE the timed region (deterministic)");
+        System.out.println("  apiCalls*    = Map method calls issued INSIDE the timed region. DERIVED: it is");
+        System.out.println("                 n because the code under test issues exactly one call per item;");
+        System.out.println("                 it is read from the structure of the code, not counted at runtime");
         System.out.println("  internalOps  = NOT counted - HashMap bucket probes, chain walks and tree");
         System.out.println("                 traversals are internal to HashMap and are not observable");
         System.out.println("                 from outside, so no counter here attempts to count them");
-        System.out.println("  elapsedNanos = wall-clock time of the TIMED REGION ONLY, from");
+        System.out.println("  elapsedNs    = wall-clock time of the TIMED REGION ONLY, from");
         System.out.println("                 System.nanoTime(); includes JVM and runtime overhead");
-        System.out.println("  spaceEntries = entries held by the structure (the auxiliary-space evidence)");
+        System.out.println("  entries*     = entries held by the structure (auxiliary space). DERIVED = n");
+        System.out.println("  distinctKeys = size of the resulting map (OBSERVED via Map.size())");
+        System.out.println();
+        System.out.println("  A column name ending in * is DERIVED from the code's structure, not measured.");
+        System.out.println("  Only elapsedNs and distinctKeys are OBSERVED at runtime.");
         System.out.println();
         System.out.println("Predictions below are theory. Measurements below are observations on this");
         System.out.println("machine. A measured time is NOT a complexity guarantee.");
@@ -137,7 +145,7 @@ public class ComplexityAudit {
         System.out.println("             else - no setup, no allocation, no construction is inside it.");
         System.out.println();
         System.out.printf("  %-8s %-9s %-30s %-9s %-13s %-12s %-10s %s%n",
-                "n", "operation", "timed work (inside the timer)", "apiCalls", "elapsedNs",
+                "n", "operation", "timed work (inside the timer)", "apiCalls*", "elapsedNs",
                 "ns/apiCall", "space", "predicted (theory)");
 
         for (int n : SIZES) {
@@ -209,7 +217,7 @@ public class ComplexityAudit {
         header("2. StudentDirectory - shape sweep at n = " + SHAPE_N
                 + " (average case vs pathological case)");
         System.out.println("  S1 distributed   - ordinary sequential IDs; natural hash spread (AVERAGE)");
-        System.out.println("  S2 shared prefix - long common prefix, varying suffix; realistic, clustered");
+        System.out.println("  S2 shared prefix - long common prefix, varying suffix; NOT hash-clustered (String.hashCode uses the whole string), expected to behave like S1");
         System.out.println("  S3 colliding     - real String IDs that ALL share ONE hash code (WORST)");
         System.out.println();
         System.out.println("  Textbook worst case for a fully-colliding key set is O(n) per operation.");
@@ -221,10 +229,10 @@ public class ComplexityAudit {
         System.out.println();
         System.out.println("  setup (outside the timer): the Student records are built once and reused;");
         System.out.println("  a populated directory is built once and reused for the get row.");
-        System.out.println("  timed work: n addStudent calls, or n getStudent calls, and nothing else.");
+        System.out.println("  timed work: 1 directory + n addStudent calls (put), or n getStudent calls (get).");
         System.out.println();
-        System.out.printf("  %-16s %-9s %-22s %-9s %-13s %-12s %s%n",
-                "shape", "operation", "timed work", "apiCalls", "elapsedNs", "ns/apiCall",
+        System.out.printf("  %-16s %-9s %-28s %-9s %-13s %-12s %s%n",
+                "shape", "operation", "timed work", "apiCalls*", "elapsedNs", "ns/apiCall",
                 "predicted (theory)");
 
         List<String> s1 = distributedIds(SHAPE_N);
@@ -247,8 +255,8 @@ public class ComplexityAudit {
                 }
             }
         });
-        System.out.printf("  %-16s %-9s %-22s %,9d %-13d %-12.2f %s%n",
-                name, "put", "n addStudent", ids.size(), putNs, (double) putNs / ids.size(), prediction);
+        System.out.printf("  %-16s %-9s %-28s %,9d %-13d %-12.2f %s%n",
+                name, "put", "1 directory + n addStudent", ids.size(), putNs, (double) putNs / ids.size(), prediction);
 
         final StudentDirectory built = new StudentDirectory();
         for (int i = 0; i < ids.size(); i++) {
@@ -261,7 +269,7 @@ public class ComplexityAudit {
                 }
             }
         });
-        System.out.printf("  %-16s %-9s %-22s %,9d %-13d %-12.2f %s%n",
+        System.out.printf("  %-16s %-9s %-28s %,9d %-13d %-12.2f %s%n",
                 name, "get", "n getStudent", ids.size(), getNs, (double) getNs / ids.size(), prediction);
     }
 
@@ -276,10 +284,10 @@ public class ComplexityAudit {
         System.out.println();
         System.out.println("  setup (outside the timer): a populated directory with n records.");
         System.out.println("  timed work: ONE snapshot() call, which copies all n entries.");
-        System.out.println("  apiCalls = 1 (one snapshot call); entries = n (the size of the copy).");
+        System.out.println("  apiCalls* = 1 (one snapshot call); entries* = n (the size of the copy). Both derived.");
         System.out.println();
         System.out.printf("  %-8s %-9s %-9s %-14s %-13s %-14s %s%n",
-                "n", "apiCalls", "entries", "elapsedNs", "ns/entry", "space", "predicted (theory)");
+                "n", "apiCalls*", "entries*", "elapsedNs", "ns/entry", "space", "predicted (theory)");
 
         for (int n : SIZES) {
             final List<String> ids = distributedIds(n);
@@ -291,12 +299,14 @@ public class ComplexityAudit {
 
             long snapshotNs = medianNanos(null, new Runnable() {
                 public void run() {
-                    Map<String, Student> copy = dir.snapshot();
-                    if (copy.size() != ids.size()) {
-                        throw new IllegalStateException("snapshot lost entries");
-                    }
+                    SINK = dir.snapshot();
                 }
             });
+            // Correctness check happens OUTSIDE the timer so the timed region is
+            // exactly one snapshot() call. SINK keeps the copy from being optimised away.
+            if (dir.snapshot().size() != ids.size()) {
+                throw new IllegalStateException("snapshot lost entries");
+            }
             System.out.printf("  %,8d %-9d %,9d %-14d %-13.2f %-14s %s%n",
                     n, 1, n, snapshotNs, (double) snapshotNs / n, n + " entries",
                     "O(n) time / O(n) space");
@@ -309,13 +319,13 @@ public class ComplexityAudit {
 
     private static void frequencySweep() {
         header("4. Character-frequency counting - time is linear in length, space in distinct keys");
-        System.out.println("  charsRead   = number of characters read");
-        System.out.println("  mapGets     = number of Map.get calls issued (one per character)");
-        System.out.println("  mapPuts     = number of Map.put calls issued (one per character)");
-        System.out.println("  mapApiCalls = mapGets + mapPuts; the counter performs BOTH a get and a");
+        System.out.println("  charsRead*  = number of characters read (DERIVED = length)");
+        System.out.println("  mapGets*    = Map.get calls issued (DERIVED: one per character, from the code)");
+        System.out.println("  mapPuts*    = Map.put calls issued (DERIVED: one per character, from the code)");
+        System.out.println("  mapApiCalls* = mapGets + mapPuts; the counter performs BOTH a get and a");
         System.out.println("                put for every character, so this is 2 x charsRead.");
         System.out.println("                mapPuts on its own is NOT the whole Map traffic.");
-        System.out.println("  distinctKeys = size of the resulting map (the auxiliary space)");
+        System.out.println("  distinctKeys = size of the resulting map (OBSERVED; the auxiliary space)");
         System.out.println();
         System.out.println("  setup (outside the timer): the text is built once, before any timing.");
         System.out.println("  timed work: ONE count() call over the whole text.");
@@ -326,8 +336,8 @@ public class ComplexityAudit {
         System.out.println("  The O(n^2) pathological bound is therefore theoretical and is NOT claimed");
         System.out.println("  as measured here.");
         System.out.println();
-        System.out.printf("  %-10s %-11s %-9s %-10s %-8s %-8s %-11s %-12s %-10s %s%n",
-                "shape", "length", "distinct", "charsRead", "mapGets", "mapPuts", "mapApiCalls",
+        System.out.printf("  %-10s %-11s %-9s %-10s %-8s %-8s %-12s %-12s %-10s %s%n",
+                "shape", "length", "distinct", "charsRead*", "mapGets*", "mapPuts*", "mapApiCalls*",
                 "elapsedNs", "ns/char", "predicted (theory)");
 
         int[] lengths = { 1000, 100000, 1000000 };
@@ -349,7 +359,7 @@ public class ComplexityAudit {
             }
         });
 
-        System.out.printf("  %-10s %,11d %-9d %-10d %-8d %-8d %-11d %-12d %-10.2f %s%n",
+        System.out.printf("  %-10s %,11d %-9d %-10d %-8d %-8d %-12d %-12d %-10.2f %s%n",
                 shape, length, distinctKeys, length, length, length, length * 2, elapsedNs,
                 (double) elapsedNs / length, prediction);
     }

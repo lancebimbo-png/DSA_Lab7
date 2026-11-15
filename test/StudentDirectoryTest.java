@@ -34,6 +34,10 @@ public class StudentDirectoryTest {
         testNullInputsAreSafeForReads();
         testSnapshotContentMatchesTheDirectory();
         testContainsStudentAgreesWithGetStudent();
+        testUpdateWithNullStudentIsRejected();
+        testUpdateWithMismatchedIdIsRejected();
+        testAddStudentWithNullRecordIdIsRejected();
+        testRemovingTheLastStudentEmptiesTheDirectory();
 
         System.out.println();
         System.out.println("StudentDirectoryTest results: " + passed + " passed, " + failed + " failed");
@@ -290,6 +294,9 @@ public class StudentDirectoryTest {
             dir.addStudent("A", new Student("A", "Alice", 89.5));
             dir.addStudent("B", new Student("B", "Ben", 91.0));
             dir.addStudent("C", new Student("C", "Carla", 85.5));
+            check("containsStudent is true for A", dir.containsStudent("A"));
+            check("containsStudent is true for B", dir.containsStudent("B"));
+            check("containsStudent is true for C", dir.containsStudent("C"));
             check("containsStudent agrees for A",
                     dir.containsStudent("A") == (dir.getStudent("A") != null));
             check("containsStudent agrees for B",
@@ -300,6 +307,65 @@ public class StudentDirectoryTest {
             check("containsStudent is false for a null ID", !dir.containsStudent(null));
         } catch (UnsupportedOperationException e) {
             check("containsStudent agreement implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testUpdateWithNullStudentIsRejected() {
+        section("A16 - updateStudent with a null Student is rejected");
+        StudentDirectory dir = new StudentDirectory();
+        try {
+            dir.addStudent("A", new Student("A", "Alice", 89.5));
+            check("updating with a null Student returns false", !dir.updateStudent("A", null));
+            check("the stored record is unchanged", "Alice".equals(dir.getStudent("A").name()));
+            check("size is unchanged", dir.size() == 1);
+        } catch (UnsupportedOperationException e) {
+            check("null-Student update rejection implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testUpdateWithMismatchedIdIsRejected() {
+        section("A17 - updateStudent with a mismatched record ID is rejected");
+        StudentDirectory dir = new StudentDirectory();
+        try {
+            dir.addStudent("A", new Student("A", "Alice", 89.5));
+            check("updating key A with a record for B returns false",
+                    !dir.updateStudent("A", new Student("B", "Bob", 91.0)));
+            check("the stored record is unchanged", "Alice".equals(dir.getStudent("A").name()));
+            check("no record for B was stored", dir.getStudent("B") == null);
+            check("size is unchanged", dir.size() == 1);
+        } catch (UnsupportedOperationException e) {
+            check("update ID-consistency rejection implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testAddStudentWithNullRecordIdIsRejected() {
+        section("A18 - a Student whose own ID is null is rejected");
+        StudentDirectory dir = new StudentDirectory();
+        try {
+            check("addStudent with a null record ID returns false",
+                    !dir.addStudent("A", new Student(null, "NoId", 90.0)));
+            check("nothing was stored", dir.size() == 0);
+        } catch (UnsupportedOperationException e) {
+            check("null-record-ID rejection implemented", false);
+            blocked(e);
+        }
+    }
+
+    private static void testRemovingTheLastStudentEmptiesTheDirectory() {
+        section("A19 - removing the last student empties the directory");
+        StudentDirectory dir = new StudentDirectory();
+        try {
+            dir.addStudent("A", new Student("A", "Alice", 89.5));
+            check("removing the only student returns true", dir.removeStudent("A"));
+            check("size is 0", dir.size() == 0);
+            check("the student is gone", dir.getStudent("A") == null);
+            check("containsStudent is false", !dir.containsStudent("A"));
+            check("the snapshot is empty", dir.snapshot().isEmpty());
+        } catch (UnsupportedOperationException e) {
+            check("remove-to-empty implemented", false);
             blocked(e);
         }
     }

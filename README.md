@@ -26,9 +26,9 @@ Lab7
 │   └── ComplexityAudit.java            # complexity measurement harness
 ├── test/
 │   ├── LabTestRunner.java              # acceptance suite (agent-authored) - 55 assertions
-│   ├── StudentDirectoryTest.java       # student-authored edge cases - 65 assertions
+│   ├── StudentDirectoryTest.java       # student-authored edge cases - 82 assertions
 │   ├── CharacterFrequencyTest.java     # student-authored edge cases - 30 assertions
-│   └── ProductInventoryTest.java       # student-authored Part A cases - 34 assertions
+│   └── ProductInventoryTest.java       # student-authored Part A cases - 40 assertions
 ├── out/                                # generated .class files (git-ignored)
 ├── AGENT_LOG.md                        # plan, test, build and audit checkpoints
 ├── README.md
@@ -60,14 +60,14 @@ Individual suites:
 
 ```bash
 java -ea -cp out LabTestRunner            # 55 assertions
-java -ea -cp out StudentDirectoryTest     # 65 assertions
+java -ea -cp out StudentDirectoryTest     # 82 assertions
 java -ea -cp out CharacterFrequencyTest   # 30 assertions
-java -ea -cp out ProductInventoryTest     # 34 assertions
+java -ea -cp out ProductInventoryTest     # 40 assertions
 java -ea -cp out ComplexityAudit          # complexity measurements + self-checks
 java -cp out Lab7Demo                     # the demonstration output
 ```
 
-**Expected result (verified 2026-11-15):** 184 assertions, **0 failures**, every
+**Expected result (verified 2026-11-15):** 207 assertions, **0 failures**, every
 suite exiting 0, and `run-tests.bat` exiting 0.
 
 ## API
@@ -118,10 +118,11 @@ uses that number to work out which bucket must hold the entry, and goes
 **straight to that bucket**. Nothing else is visited. That is an average
 **O(1)** lookup — "constant time" — regardless of how many records are stored.
 
-The measured evidence from `ComplexityAudit` agrees: over a 100× increase in
-student count, the per-operation cost of `get` stayed in the same band
-(95 ns → 17 ns per call) instead of growing with n, which is the signature of
-constant-time access.
+The list comparison above is theory: `ComplexityAudit` measures only the
+`HashMap` side and never times an `ArrayList` or `LinkedList` scan. What was
+measured is that, over a 100× increase in student count, the per-call cost of
+`get` did not grow with n (it fell from 95 ns to 17 ns, a JIT/cache effect rather
+than a complexity effect), which is consistent with constant-time access.
 
 The trade-off is that a `HashMap` does **not** keep its entries in insertion
 order, has more per-entry overhead than a list, and its worst case degrades when
@@ -167,7 +168,7 @@ be measured.
 
 The `ComplexityAudit` measures this directly with 50,000 **real** `String` keys
 that all share one hash code. The colliding shape turned out to be only about
-**5× slower** per operation than the distributed shape — not the four orders of
+**8× slower** per `get` and **5× slower** per `put` than the distributed shape — not the four orders of
 magnitude the textbook O(n) bound would suggest — because the bucket is
 treeified.
 
@@ -192,25 +193,24 @@ submitted as **Lab 7 — HashMap and Key–Value Structures**, workbook ID
 
 | Operation | Average | Worst | Measured observation |
 |---|---|---|---|
-| `put` / `get` / `remove` | O(1) | O(n) textbook; O(log n) with treeified bins | flat per-call cost over a 100× range of n |
+| `put` / `get` / `remove` | O(1) (`put`: O(1) amortized) | O(n) textbook; O(log n) with treeified bins | per-call cost did not grow over a 100× range of n; colliding keys ~5–8× slower, consistent with treeification |
 | `snapshot()` | O(n) time, O(n) space | O(n) | time and entries both linear in n |
-| character frequency | O(n) time, O(k) space | O(n²) textbook (not exercisable with `Character` keys) | `charsRead` = length; `mapGets` = `mapPuts` = length, so `mapApiCalls` = 2 × length; `distinctKeys` constant |
+| character frequency | O(n) time, O(k) space | O(n²) textbook (not exercisable with `Character` keys) | `distinctKeys` constant (observed). `charsRead`, `mapGets`, `mapPuts`, `mapApiCalls` are *derived from the code* (one get and one put per character), not counted at runtime |
 
 Each timed figure covers **only** the operation named in its row — the setup is
 prepared before the timer starts and is never included. The audit prints that
 split in its own output.
 
-Full measurements, the prediction that was recorded before measuring, and the
-measured results are in `AGENT_LOG.md` §15.6. Measured runtime is an observation
+Full measurements and the measured results are in `AGENT_LOG.md` §15.6; the
+predictions were recorded in the Plan, `AGENT_LOG.md` §9.3. Measured runtime is an observation
 on one machine — it is never presented as a complexity guarantee.
 
 ## Submission checklist
 
 - [x] `src/` contains the completed implementation, with no TODOs remaining.
 - [x] `test/` contains normal, boundary and invalid-operation tests.
-- [x] All tests compile and pass with assertions enabled (184 assertions, 0 failures).
+- [x] All tests compile and pass with assertions enabled (207 assertions, 0 failures).
 - [x] `AGENT_LOG.md` records the student plan before Build edits were allowed.
 - [x] `out/`, credentials and generated files are excluded by `.gitignore`.
-- [x] Git repository, commit and push — **done**: `DSA_Lab7` on GitHub, branch `main`,
-      one commit, `out/` and `node_modules/` excluded.
-- [ ] Audit checkpoint — **not started**.
+- [x] Git repository, commit and push — pushed to GitHub.
+- [x] Audit checkpoint — `@test-reviewer` and `@complexity-auditor` run; see `AGENT_LOG.md` §16.

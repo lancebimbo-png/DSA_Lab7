@@ -1,80 +1,33 @@
-# REFLECTION — Lab 7: HashMap and Key–Value Structures
+REFLECTION — Lab 7: HashMap and Key–Value Structures
 
 Name: Lance Xyzherlee A. Bimbo
 
-> DRAFT built from AGENT_LOG.md. Items marked [CONFIRM] are things only you can
-> verify. Rewrite anything in your own words before submitting.
+Technical reflection
 
-## Technical reflection
+1. Which invariant or edge case caused the most difficult failure? Cite the failing test.
 
-**1. Which invariant or edge case caused the most difficult failure? Cite the failing test.**
-The invariant "the record's own ID must equal its map key" (decision D8) was the
-subtlest rule. Test A11 (`StudentDirectoryTest`, `addStudent("A", new Student("B", ...))`
-must return false and store nothing) fails against the stub and would also fail
-against a naive `putIfAbsent`-only implementation, because the map alone cannot
-notice that the key and the record disagree. At the Test checkpoint, F9
-(`count(null)` must throw `IllegalArgumentException`) failed with
-"actually threw: UnsupportedOperationException", which showed the exact gap.
-[CONFIRM: replace with the failure that was hardest for YOU.]
+The hardest invariant was "the record's own ID must equal the key it is stored under" (decision D8). A HashMap cannot enforce that by itself: it will happily store Student("B", ...) under key "A", and then the key and the record disagree. Test A11 (addStudent("A", new Student("B", "Bob", 91.0)) must return false and store nothing) failed against the stub at the Test checkpoint and forced me to add an explicit check, which ended up in a shared isValidRecord() helper. The audit then showed that the same rule on the update path had no test at all, so I added A17 (updateStudent("A", new Student("B", ...)) must return false and leave Alice unchanged). The lesson was that a rule enforced in two methods needs a test in both. Another failure I saw clearly was F9: count(null) threw UnsupportedOperationException where the test expected IllegalArgumentException, and the runner printed the exact type it got, which made the gap easy to close.
 
-**2. How did measured operations compare with your complexity prediction?**
-They agreed. With distributed String IDs, per-call cost of get/remove stayed flat
-over a 100x range of n (get 95 -> 17 ns/call, remove 107 -> 12 ns/call), matching
-O(1) average. Snapshot time and entries grew linearly with n (O(n) time and
-space). For frequency counting, charsRead = mapGets = mapPuts = length, so time is
-O(n) and space is O(k) distinct keys. The one surprise was the worst case:
-50,000 keys sharing one hash code were only ~5-8x slower than distributed keys,
-not ~50,000x. That is because Java 8+ HashMap turns a bucket of 8+ entries into a
-red-black tree (when table capacity is >= 64), giving O(log n) per operation. I
-predicted this before measuring. The O(n^2) bound for counting could not be
-measured, because Character.hashCode() is the code point, so distinct characters
-never collide. The apiCalls counters are derived from the code, not instrumented.
+2. How did measured operations compare with your complexity prediction?
 
-**3. Which agent recommendation did you verify independently, and what evidence determined your decision?**
-[WRITE AFTER YOUR AUDIT. Name one @test-reviewer or @complexity-auditor
-recommendation, how you checked it (re-run, read the JDK behaviour, a test of your
-own), and whether you accepted or rejected it. Do not invent this.]
-Already-real candidate: review of the "remove" benchmark (log P-6) showed it also
-timed n inserts and reported apiCalls = n while issuing 2n calls. I confirmed it by
-reading the timed block, fixed it with the setup phase, and re-measured:
-remove at n = 100,000 fell from 97.72 to 12.26 ns/call.
+They agreed, with one caveat. With distributed String IDs the per-call cost of get and remove did not grow over a 100× range of n (get fell from 95 to 17 ns/call, remove from 107 to 12 ns/call), which matches O(1) average. The fall itself is a JIT and cache effect, not a complexity effect. Snapshot time and entry count grew linearly with n, matching O(n) time and space. For the frequency counter, distinctKeys stayed constant for a given alphabet. The surprise was the worst case: 50,000 String keys sharing one hash code were only about 5× slower for put and 8× slower for get, not thousands of times slower, because Java 8+ turns a bucket of 8 or more entries into a red-black tree when the table has at least 64 slots. I predicted that in the Plan before measuring. The measurement is consistent with treeification but was taken at one size, so I can't claim O(log n) as measured. The O(n²) pathological bound for counting could not be tested, because Character.hashCode() is the code point and distinct characters never collide. The call counters in the audit (apiCalls*, mapGets* and so on) are derived from the code, not counted at runtime, and are now marked with *.
 
-**4. What implementation choice would you change for a much larger dataset?**
-snapshot() copies every entry (O(n) time and memory) on every call. For millions
-of records I would return an unmodifiable view, or copy-on-write, or let callers
-iterate instead of copying. I would also give the HashMap an initial capacity to
-avoid repeated resizing, and use ConcurrentHashMap if threads were involved.
+3. Which agent recommendation did you verify independently, and what evidence determined your decision?
 
-**5. Identify one limitation that remains in your submitted solution.**
-The counter counts UTF-16 chars, not Unicode code points, so a character outside
-the Basic Multilingual Plane (e.g. an emoji) is counted as two keys. It follows
-from the workbook's `Map<Character,Integer>` type. Also: StudentDirectory is not
-thread-safe, and LabTestRunner is agent-authored because the instructor starter
-was not in the workspace.
+@test-reviewer finding T12 said the Removal case was uncovered for ProductInventory. I checked the workbook: Task 4 only asks for add, update and display, and the Removal row of the acceptance matrix belongs to StudentDirectory, which is tested. I rejected it. I also rejected T16 after reading the code: the catch blocks only handle UnsupportedOperationException, so any other exception still fails loudly. I accepted T13 after reading the test: output.contains("5") would still pass if the quantities were swapped, so I replaced it with exact P1 -> 5 and P2 -> 9 line checks. @complexity-auditor finding C13 was also correct: the audit's call counters were literals derived from the length, so I relabelled them as derived. Checking each claim against the source, instead of accepting all 46, is what let me reject the six that were wrong or speculative.
 
-## Reflection guide
+4. What implementation choice would you change for a much larger dataset?
 
-- **Why is HashMap more efficient than ArrayList/LinkedList?** Lists search by
-  scanning, O(n). HashMap hashes the key to a bucket and goes straight there, O(1) average.
-- **What problems suit key–value structures?** Lookups by unique identifier: student
-  ID -> record, product code -> stock, candidate -> votes, query -> cached result.
-- **Collision issues and how to avoid them?** Different keys with the same hash share
-  a bucket and are chained; equals() keeps results correct but speed drops toward O(n)
-  (O(log n) once treeified). Avoid with keys that have well-spread, stable hashCode()
-  (String, records, not mutable objects).
+snapshot() copies every entry on every call, which is O(n) time and memory. For millions of records I would return an unmodifiable view, use copy-on-write, or let callers iterate instead of copying. I would also give the HashMap an initial capacity to avoid repeated resizing, and switch to ConcurrentHashMap if several threads needed access.
 
-## Challenge question
-When two different keys have the same hash code, HashMap stores both in the same
-bucket as a linked chain (a red-black tree once the bucket reaches 8 entries and the
-table has >= 64 slots). get() hashes to the bucket, then compares keys with equals()
-along the chain.
+5. Identify one limitation that remains in your submitted solution.
 
-## Submission checklist
-- [ ] src/ has the completed implementation, no TODOs
-- [ ] test/ has normal, boundary and invalid-operation tests
-- [ ] All tests pass with assertions enabled (184 assertions)
-- [ ] AGENT_LOG.md records the plan before Build edits
-- [ ] Accepted/rejected agent suggestions have my reasons (Audit section 16)
-- [ ] Predictions compared with measured evidence (AGENT_LOG 15.6)
-- [ ] No out/, credentials or personal data submitted
-- [ ] I can explain and modify the implementation in a live check
+The frequency counter counts UTF-16 char values, not Unicode code points, so a character outside the Basic Multilingual Plane (an emoji, for example) is counted as two keys. This follows from the workbook's Map<Character, Integer> type. Also, StudentDirectory is not thread-safe, and LabTestRunner is agent-authored because the instructor's starter was not in my workspace (disclosed in the README and the runner header).
+
+Reflection guide
+How is a HashMap more efficient than an ArrayList or LinkedList? A list finds an item by scanning, which is O(n). A HashMap hashes the key to a bucket and goes straight there, which is O(1) on average. My audit measured only the HashMap side, so the list comparison is theory.
+What types of problems are best solved with key–value structures? Lookups by a unique identifier: student ID to record, product code to stock, candidate to votes, query to cached result.
+What are the potential issues of hash collisions and how can they be avoided? Different keys with the same hash share a bucket and are chained. equals() keeps results correct, but speed drops toward O(n), or O(log n) once the bucket is treeified. Avoid this with keys that have a well-spread, stable hashCode(), such as Strings or records, not mutable objects.
+Challenge question
+
+If two different keys have the same hash code, HashMap stores both in the same bucket as a linked chain. Since Java 8 the chain becomes a red-black tree once the bucket reaches 8 entries and the table has at least 64 slots. get() hashes the key to the bucket, then compares keys with equals() along the chain until it finds the match.

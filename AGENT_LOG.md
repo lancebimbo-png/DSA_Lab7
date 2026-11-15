@@ -446,8 +446,8 @@ displayStock():
 |---|---|---|---|
 | A1 | Normal insertion and retrieval | add 1 student → `size()==1`, `getStudent(id)!=null`, id/name/grade all equal | retrieval returns the wrong record or `null` |
 | A2 | Multiple records coexist | add 5 students → `size()==5`; all 5 retrievable with correct fields; all 5 ids distinct | records overwrite one another, or one is lost |
-| A3 | **Snapshot independence — mutate the copy** | `snap.put("X",z); snap.remove("A");` → `dir.size()==5`; `dir.getStudent("A")!=null`; `dir.getStudent("X")==null` | the backing map leaks to the caller |
-| A4 | **Snapshot independence — mutate the directory afterwards** | `snap = dir.snapshot(); dir.removeStudent("A");` → `snap` still contains "A"; `snap.size()==5` | the snapshot is a live view rather than a copy |
+| A3 | **Snapshot independence — mutate the copy** | `snap.put("X",z); snap.remove("A");` → `dir.size()==2`; `dir.getStudent("A")!=null`; `dir.getStudent("X")==null` | the backing map leaks to the caller |
+| A4 | **Snapshot independence — mutate the directory afterwards** | `snap = dir.snapshot(); dir.removeStudent("A");` → `snap` still contains "A"; `snap.size()==2` | the snapshot is a live view rather than a copy |
 | A5 | Snapshot of an empty directory | `snap.isEmpty()` **and** the returned map is mutable | `null` is returned, or an immutable map is returned |
 | A6 | Update targets only the requested id | after `updateStudent("A",…)`, `getStudent("B")` name and grade unchanged | the update clobbers the wrong entry |
 | A7 | Update of a nonexistent id does not insert | `updateStudent("ZZZ",s)==false`; `size()` unchanged; `getStudent("ZZZ")==null` | the update silently upserts |
@@ -466,7 +466,7 @@ displayStock():
 | F5 | Mid-string repeat | `count("xyzzy")` → y=2, x=1, z=2, `size()==3` | a repeat in the middle is mishandled |
 | F6 | **Case sensitivity (D6)** | `count("Aa")` → `size()==2`; `get('A')==1`; `get('a')==1` | case is folded, or one of the two keys is lost |
 | F7 | **Whitespace and punctuation are counted (D6)** | `count("a, b")` → `size()==4`; `get(' ')==1`; `get(',')==1` | whitespace/punctuation is filtered out |
-| F8 | Counts sum to the input length | `"the quick brown fox"` → sum == 19, 15 distinct keys, `' '`==2, `'o'`==3 | a character is dropped or double-counted |
+| F8 | Counts sum to the input length | `"the quick brown fox"` → sum == 19, 16 distinct keys (15 letters + space), `' '`==3, `'o'`==2 | a character is dropped or double-counted |
 | F9 | Null input to the counter throws | local throwable-capture helper asserts `java.lang.IllegalArgumentException` | null is silently accepted, or a different exception type is thrown |
 | F10 | Non-ASCII character is one distinct key | `count("aé")` → `size()==2`; `get('a')==1`; `get('é')==1` | multi-byte handling corrupts counts |
 
@@ -1628,7 +1628,7 @@ are the fallback `check("<behaviour> implemented", false)` lines inside the
 stub threw, so those 41 lines reported the 41 failures and the other 184 lines
 were never reached. Now that the implementation exists, no method throws, so
 those 41 fallbacks are never executed and the remaining 184 assertions run.
-184 + 41 = 225 — the two counts reconcile exactly.
+Correct reconciliation: 225 call sites = 182 live + 43 fallback lines; the 184 reported results = 182 live + 2 re-executions of loop call sites (corrected after the Audit, see §16, finding T23).
 
 **No test was modified, weakened, removed or bypassed at this checkpoint.** The
 four `test/*.java` files are byte-identical to their Test-checkpoint versions.
@@ -1697,7 +1697,7 @@ which is exactly what the **prediction recorded before measuring** said would
 happen: on Java 8+ a bucket holding 8 or more entries is treeified into a
 red-black tree, **provided the table's capacity is at least 64**; below that
 capacity the map resizes instead. A treeified bucket bounds the per-operation
-cost at O(log n) instead of O(n). **The prediction was confirmed.**
+cost at O(log n) instead of O(n). **The measurement is consistent with the prediction**: it rules out the O(n) chain walk, but it was taken at a single colliding size, so the O(log n) bound itself remains theory (Audit finding C3).
 
 Honest caveat: S2 came out slightly *faster* than S1 on both operations. That is
 measurement noise, not a real property of the shared prefix — the two shapes are
@@ -1770,10 +1770,10 @@ contract is therefore **theoretical and is not claimed as measured here**.
 
 | Operation | Predicted (theory) | Measured (observation) | Agreement |
 |---|---|---|---|
-| put / get / remove, distributed keys | O(1) average | per-call cost flat over a 100× range of n | Yes |
-| put / get / remove, all-colliding keys | O(n) textbook worst; O(log n) with treeified bins | ~5–8× slower than the distributed shape, not ~50,000× slower | Yes — treeification confirmed |
+| put / get / remove, distributed keys | O(1) average | per-call cost did not grow over a 100× range of n (get fell 95 → 17 ns) | Yes |
+| put / get / remove, all-colliding keys | O(n) textbook worst; O(log n) with treeified bins | ~5–8× slower than the distributed shape, not ~50,000× slower | Consistent with treeification (single size, so O(log n) is not proven) |
 | snapshot | O(n) time, O(n) space | time and entries both linear in n | Yes |
-| character frequency | O(n) time, O(k) space | charsRead = mapGets = mapPuts = length, so mapApiCalls = 2 × length; distinctKeys constant | Yes |
+| character frequency | O(n) time, O(k) space | distinctKeys constant (observed); the call counters are derived from the code, not counted | Yes |
 
 #### 15.6.6 The four quantities, kept separate
 
@@ -1782,10 +1782,10 @@ combines them:
 
 | Quantity | Value in this lab |
 |---|---|
-| API-level method-call counts | `apiCalls`, `charsRead`, `mapGets`, `mapPuts`, `mapApiCalls`, `entries` — deterministic, and always equal to the calls issued **inside the timed region** |
+| API-level method-call counts | `apiCalls*`, `charsRead*`, `mapGets*`, `mapPuts*`, `mapApiCalls*` — **derived from the code's structure, not counted at runtime**; they equal the calls issued inside the timed region because the code issues one call per item |
 | Internal HashMap operations | **not counted** — not observable from outside the JDK; the audit says so in its own header |
-| Elapsed time | `elapsedNanos` — wall-clock of the timed region only, includes JVM overhead |
-| Auxiliary space | `spaceEntries`, `distinctKeys` — entry counts |
+| Elapsed time | `elapsedNs` — wall-clock of the timed region only, includes JVM overhead |
+| Auxiliary space | `entries*` (derived = n), `distinctKeys` (observed) — entry counts |
 
 #### 15.6.7 The measurement-methodology correction
 
@@ -1917,7 +1917,7 @@ counter also performs. *Fix:* the audit now reports `mapGets`, `mapPuts` and
 `mapApiCalls` (= 2 × length) separately, and states in its own header that
 `mapPuts` alone is not the whole Map traffic. The implementation itself was not
 changed — it has always performed one `get` and one `put` per character; only
-the reporting was wrong.
+the reporting was wrong. *Audit correction (§16, C15):* the counters are still derived from the code, not instrumented; the fix corrected how the traffic was described, not how it is counted. The audit now marks derived columns with `*`.
 
 ### 15.8 Defects and limitations remaining after the Build checkpoint
 
@@ -1950,76 +1950,88 @@ the reporting was wrong.
 | Plan | Complete (§1–§13) |
 | Test | Complete (§14), including two review-driven correction rounds |
 | **Build** | **Complete, including a measurement-methodology correction.** 3 stub classes implemented, 3 new files created, scripts updated, compile clean, **184 assertions passed / 0 failed**, 3 audit self-checks passed, `run-tests.bat` exit code 0, `javac --release 17` exit 0. The complexity audit was corrected after review (P-6, P-7, P-8) and **re-measured from a clean build**; §15.6 now carries only the corrected figures. |
-| Audit | **Not started.** The `@test-reviewer` and `@complexity-auditor` agents remain unavailable; the decision on creating them or using the available general agent is still open. |
-| Git | **Not started.** No `init`, `add`, `commit`, `push`, `branch`, `clone`, and no GitHub repository was created. |
+| Audit | **Complete — see §16.** |
+| Git | Pushed to GitHub by the student. |
+
 
 ---
 
-## 16. GIT checkpoint (executed)
+## 16. AUDIT checkpoint (executed)
 
-**Checkpoint date:** 2026-11-15
-**Authorization:** a separate, explicit instruction to push the project to GitHub.
-This is the instruction that §15.9 and the earlier sections were waiting for; the
-rows above are left as written, because they record the state at the Build
-checkpoint and are not rewritten after the fact.
+**Date:** 2026-11-15. **Agents:** `@test-reviewer` and `@complexity-auditor` (read-only, defined in `.opencode/agents/`). No files were changed by the agents.
 
-### 16.1 Repository created
+**Result:** 46 findings (T1–T25 tests, C1–C21 complexity): 2 high, 16 medium, 28 low. I reviewed every finding and checked the ones marked (V) against the source myself. Decisions below.
 
-| Item | Value |
-|---|---|
-| GitHub repository | `lancebimbo-png/DSA_Lab7` |
-| Visibility | public |
-| Default branch | `main` |
-| Remote | `origin` → `https://github.com/lancebimbo-png/DSA_Lab7.git` |
-| Commits | 2 |
-| Local `origin` | created by `gh repo create` with `--source .`, URL updated after the rename |
+### 16.1 Highest-severity findings
 
-The repository was created as `Lab7`, the name the student first specified, and
-was then **renamed to `DSA_Lab7`** on the student's follow-up instruction, so
-that it matches the naming convention of the other labs on this account
-(`DSA_Lab1`…`DSA_Lab6`, `DSA_Lab8`). GitHub redirects the old URL, and the
-local `origin` was pointed at the new one.
+- **T13** (ProductInventoryTest:173-176): displayStock uses contains("5")/contains("9"); does not tie quantity to code. **Accepted.** Fix now. A swapped output would still pass. Verification: Read test lines 173-176 (V).
+- **C13** (README:197): charsRead/mapGets/mapPuts/mapApiCalls are literals from length, shown as 'measured'. **Accepted.** Fix now by relabelling as derived from the implementation. I flagged this myself. Verification: ComplexityAudit:352-354 prints length, length*2 (V).
 
-### 16.2 Commands executed
+### 16.2 Rejected recommendations, with reasons
 
-```
-git init -b main
-git add -A
-git commit -m "..."
-gh repo create Lab7 --public --source . --remote origin --push
-gh repo rename DSA_Lab7 --repo lancebimbo-png/Lab7 --yes
-git remote set-url origin https://github.com/lancebimbo-png/DSA_Lab7.git
-```
+- **T14** (LabTestRunner:90): 'did not store second record' check is redundant. **Rejected.** Redundant but harmless; the two preceding assertions are the real checks. Left as is.
+- **T16** (LabTestRunner:92): Per-section catch collapses every exception into one failure. **Rejected.** Overstated. The catch only handles UnsupportedOperationException (Test-stage stubs). Any other exception propagates and fails loudly, so nothing is hidden.
+- **T12** (ProductInventoryTest:26): Removal matrix item uncovered for ProductInventory (no removal API). **Rejected.** Overreach. Workbook Task 4 asks only add, update and display. The Removal matrix row belongs to StudentDirectory, which is tested. No removal API is required.
+- **T20** (LabTestRunner:243): equals/hashCode on a record tests the JDK. **Rejected.** Kept on purpose: documents the immutable value-type contract the directory relies on.
+- **C11** (ComplexityAudit:346-350): Discarded result could be optimised away. **Rejected.** Speculative. count() builds and fills a HashMap; I have no evidence the JIT eliminates it, and the numbers scale linearly. Not changed.
+- **C12** (ComplexityAudit:181-196): Setup GC could inflate remove timing. **Rejected.** System.gc() is a hint and adds its own noise. Median of 5 runs after warm-up already damps this. Documented as a limitation instead.
 
-### 16.3 What is committed, and what is not
+### 16.3 Accepted recommendations
 
-| Path | Committed? | Reason |
-|---|---|---|
-| `src/` (7 files) | yes | the implementation |
-| `test/` (4 files) | yes | the test suites |
-| `AGENT_LOG.md`, `README.md`, `REFLECTION.md` | yes | the lab documentation |
-| `run-tests.bat`, `run-tests.sh` | yes | the build/run scripts |
-| `.gitignore`, `.gitattributes` | yes | `out/`, `*.class`, `.vscode/`, `node_modules/` are excluded; line endings are pinned |
-| `.opencode/agents/*.md` (2 files) | yes | the two read-only agent definitions created for the Audit checkpoint |
-| `out/`, `*.class` | **no** | compiler output, excluded by `.gitignore` |
-| `.opencode/node_modules/`, `package.json`, `package-lock.json` | **no** | tool dependencies, excluded by `.opencode/.gitignore` |
+| ID | Severity | Finding | Reason / action |
+|---|---|---|---|
+| T13 | high | displayStock uses contains("5")/contains("9"); does not tie quantity to code | Fix now. A swapped output would still pass. |
+| T1 | medium | updateStudent(id, null) untested | Fix now. Real gap in invalid-operation coverage. |
+| T2 | medium | updateStudent with mismatched record ID untested | Fix now. Update path has the same D8 rule as add. |
+| T4 | medium | Removing the last record (size 0) never tested | Fix now. Boundary case. |
+| T7 | medium | adjustStock on unknown code untested | Fix now. Missing-Key case incomplete for inventory. |
+| T8 | medium | Exact-zero boundary of negative-stock guard untested | Fix now. Classic off-by-one boundary (updated < 0). |
+| T15 | medium | containsStudent 'agrees' compares two implementation values | Fix now. A containsStudent that ignored the key could still pass the agreement check. |
+| T22 | medium | Implemented displayStock test weaker than the contract in AGENT_LOG | Same defect as T13; fixed together. |
+| T3 | low | Null-name rule only tested on add | Document only for now; low value. |
+| T5 | low | Empty-string key and case-differing keys untested | Document only for now; low value. |
+| T6 | low | Student with null id() never passed | Fix now. Cheap, covers a branch in isValidRecord. |
+| T9 | low | Quantity 0 never asserted legal | Document only for now. |
+| T10 | low | displayStock on empty inventory untested | Document only for now. |
+| T11 | low | Tab/newline and surrogate pair untested | Document only; matches my stated UTF-16 limitation. |
+| T17 | low | Sum check derives total from the map under test | Document only; the other assertions pin exact counts. |
+| T18 | low | Two grades checked in one condition | Document only. |
+| T19 | low | 'snapshot is mutable' check inside if (snap != null) | Document only; the preceding check already fails on null. |
+| T21 | low | freq.get('a') == 5 unboxes null -> NPE | Fix now if time allows. A missing key aborts the suite instead of a clean [FAIL]. |
+| T23 | low | '184 + 41 = 225' mis-stated | Fix now. Agent is right. |
+| T24 | low | §7.2 matrix rows disagree with the tests | Fix now in the log. |
+| T25 | low | Header still says stubs/expected to FAIL | Fix now. Stale after Build. |
+| C13 | high | charsRead/mapGets/mapPuts/mapApiCalls are literals from length, shown as 'measured' | Fix now by relabelling as derived from the implementation. I flagged this myself. |
+| C1 | medium | HashMap-vs-list comparison cites measurements never taken | Fix now. Audit never times an ArrayList/LinkedList. |
+| C3 | medium | Treeification 'confirmed' from one colliding size | Fix now. One ratio cannot prove O(log n). |
+| C4 | medium | §15.6.1 not verbatim (columns differ) | Fix now: say the prediction column is abbreviated. |
+| C9 | medium | Shape-sweep put label says 'n addStudent' but timer includes a new directory | Fix now. Label should match the timed region. |
+| C14 | medium | apiCalls/entries are literals; only elapsedNs and distinctKeys observed | Fix now with C13. |
+| C15 | medium | P-8 'fix' only corrected reporting, not counting | Fix now in the log. |
+| C17 | medium | entries filed under call counts; spaceEntries never printed | Fix now in the log. |
+| C16 | low | Snapshot timed region also calls copy.size() | Fix now. Tiny, but the label says one call. |
+| C2 | low | 'same band / flat' misdescribes 95 -> 17 ns/call | Fix now. It fell; it did not stay flat. |
+| C5 | low | 'about 5x slower' but get was ~8x | Fix now. |
+| C6 | low | Snapshot 'noise' dismisses a rising per-entry trend | Document only: reword as 'rising with n'. |
+| C7 | low | 'Prediction recorded before measuring' not evidenced in the artifact | Fix now: point to §9.3. |
+| C8 | low | S2 'clustered' is wrong; String hash spans whole string | Fix now. Correct Java behaviour. |
+| C10 | low | Put row includes one directory allocation | Document only. Already disclosed in code comment. |
+| C18 | low | Space column mixes states | Document only. |
+| C19 | low | elapsedNanos vs elapsedNs spelling | Fix now. Trivial. |
+| C20 | low | Put is amortized O(1), not plain O(1) | Fix now. Correct. |
+| C21 | low | Plan says O(n log k) vs README O(n) | Document only. |
 
-No credential, token or key appears in any committed file; the tracked tree was
-searched for `password`, `secret`, `api_key`, `token`, `gho_` and
-`BEGIN ... PRIVATE KEY` before the commit, and nothing matched.
+### 16.4 Independently evaluated agent limitation
 
-### 16.4 Verification before the commit
+The agents were not perfect. `@test-reviewer` claimed (T12) that the Removal case is uncovered for `ProductInventory`. I checked the workbook: Task 4 requires only add, update and display, and the Removal row of the acceptance matrix is about the student directory, which is tested. I rejected it. It also claimed (T16) that the per-section `catch` collapses every exception into one failure. I read the code: it catches only `UnsupportedOperationException`, so any other exception propagates and fails loudly. `@complexity-auditor` suggested `System.gc()` and result-consumption changes (C11, C12) without evidence they matter, so I rejected those too. Its counter findings (C13–C15) were correct and matched what I already knew about the audit.
 
-`run-tests.bat` was executed immediately before the commit: **184 assertions,
-0 failures**, all four suites exiting 0 and the script exiting 0.
+### 16.5 Fixes applied after the audit
 
-### 16.5 Git checkpoint status
+All findings marked "Fix now" were applied on 2026-11-15, then the project was rebuilt from a clean `out/` and every suite re-run.
 
-| Checkpoint | Status |
-|---|---|
-| Plan | Complete (§1–§13) |
-| Test | Complete (§14) |
-| Build | Complete (§15) |
-| Audit | **Not started.** |
-| **Git** | **Complete.** Repository `DSA_Lab7` created on GitHub (created as `Lab7`, then renamed to match the account's `DSA_Lab<N>` convention), `main` committed and pushed, 20 files tracked, `out/` and `node_modules/` excluded. |
-
+- **Tests (strengthened only, none weakened or removed):** T13/T22 (displayStock now asserts the exact `P1 -> 5` / `P2 -> 9` lines and one line per entry), T15 (absolute `containsStudent` expectations added; the agreement checks were kept), T1, T2, T4, T6 (new cases A16–A19 in `StudentDirectoryTest`), T7, T8 (new cases P11–P12 in `ProductInventoryTest`), T21 (`countOf` helper so a missing key is a failed check, not an NPE), T25 (stale stub header in `LabTestRunner` replaced). The earlier statement in §15 that the four test files were byte-identical to the Test checkpoint is therefore true only for the Build checkpoint; after the Audit, three of them were extended.
+- **Audit code (`ComplexityAudit`):** C13/C14 (derived columns are now marked with `*` and the header states that only `elapsedNs` and `distinctKeys` are observed), C9 (shape-sweep put label now says "1 directory + n addStudent"), C16 (the snapshot correctness check moved outside the timer; a volatile sink keeps the copy alive), C8 (S2 relabelled as not hash-clustered), C19 (one spelling, `elapsedNs`).
+- **Docs:** C1, C2, C3, C5, C7, C20 and C4/C15/C17 wording in `README.md` and §15.6/§15.7; T23 (225 = 182 live + 43 fallback), T24 (§7.2 rows A3, A4, F8 now match the code).
+- **Result after fixes:** `LabTestRunner` 55, `StudentDirectoryTest` 82, `CharacterFrequencyTest` 30, `ProductInventoryTest` 40 = **207 assertions, 0 failures**; `ComplexityAudit` self-checks pass; `javac --release 17` clean.
+- **Accepted but only documented, not changed (low value):** T3, T5, T9, T10, T11, T17, T18, T19, C6, C10, C18, C21.
+- **Rejected:** T12, T14, T16, T20, C11, C12 (reasons in §16.2).

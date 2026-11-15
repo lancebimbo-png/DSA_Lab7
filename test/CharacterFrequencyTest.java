@@ -58,7 +58,7 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("x");
             check("the map has exactly one entry", freq.size() == 1);
-            check("the character is counted once", freq.get('x') == 1);
+            check("the character is counted once", countOf(freq, 'x') == 1);
         } catch (UnsupportedOperationException e) {
             check("single-character handling implemented", false);
             blocked(e);
@@ -71,7 +71,7 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("aaa");
             check("the map has exactly one entry", freq.size() == 1);
-            check("the character is counted three times", freq.get('a') == 3);
+            check("the character is counted three times", countOf(freq, 'a') == 3);
         } catch (UnsupportedOperationException e) {
             check("repeated-character counting implemented", false);
             blocked(e);
@@ -84,8 +84,8 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("aabb");
             check("the map has exactly two entries", freq.size() == 2);
-            check("'a' is counted twice", freq.get('a') == 2);
-            check("'b' is counted twice", freq.get('b') == 2);
+            check("'a' is counted twice", countOf(freq, 'a') == 2);
+            check("'b' is counted twice", countOf(freq, 'b') == 2);
         } catch (UnsupportedOperationException e) {
             check("mixed-character counting implemented", false);
             blocked(e);
@@ -98,9 +98,9 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("xyzzy");
             check("the map has exactly three entries", freq.size() == 3);
-            check("'x' is counted once", freq.get('x') == 1);
-            check("'y' is counted twice", freq.get('y') == 2);
-            check("'z' is counted twice", freq.get('z') == 2);
+            check("'x' is counted once", countOf(freq, 'x') == 1);
+            check("'y' is counted twice", countOf(freq, 'y') == 2);
+            check("'z' is counted twice", countOf(freq, 'z') == 2);
         } catch (UnsupportedOperationException e) {
             check("mid-string repeat counting implemented", false);
             blocked(e);
@@ -113,8 +113,8 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("Aa");
             check("the map has exactly two entries", freq.size() == 2);
-            check("'A' is counted once", freq.get('A') == 1);
-            check("'a' is counted once", freq.get('a') == 1);
+            check("'A' is counted once", countOf(freq, 'A') == 1);
+            check("'a' is counted once", countOf(freq, 'a') == 1);
         } catch (UnsupportedOperationException e) {
             check("case-sensitive counting implemented", false);
             blocked(e);
@@ -127,10 +127,10 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("a, b");
             check("the map has exactly four entries", freq.size() == 4);
-            check("'a' is counted once", freq.get('a') == 1);
-            check("the space is counted once", freq.get(' ') == 1);
-            check("the comma is counted once", freq.get(',') == 1);
-            check("'b' is counted once", freq.get('b') == 1);
+            check("'a' is counted once", countOf(freq, 'a') == 1);
+            check("the space is counted once", countOf(freq, ' ') == 1);
+            check("the comma is counted once", countOf(freq, ',') == 1);
+            check("'b' is counted once", countOf(freq, 'b') == 1);
         } catch (UnsupportedOperationException e) {
             check("whitespace and punctuation counting implemented", false);
             blocked(e);
@@ -155,8 +155,8 @@ public class CharacterFrequencyTest {
             }
             check("the counts sum to 19", total == 19);
             check("the string has 16 distinct characters (15 letters + 1 space)", freq.size() == 16);
-            check("' ' occurs three times", freq.get(' ') == 3);
-            check("'o' occurs two times", freq.get('o') == 2);
+            check("' ' occurs three times", countOf(freq, ' ') == 3);
+            check("'o' occurs two times", countOf(freq, 'o') == 2);
         } catch (UnsupportedOperationException e) {
             check("count total implemented", false);
             blocked(e);
@@ -184,8 +184,8 @@ public class CharacterFrequencyTest {
         try {
             Map<Character, Integer> freq = counter.count("a\u00e9");
             check("the map has exactly two entries", freq.size() == 2);
-            check("'a' is counted once", freq.get('a') == 1);
-            check("the accented character is counted once", freq.get('\u00e9') == 1);
+            check("'a' is counted once", countOf(freq, 'a') == 1);
+            check("the accented character is counted once", countOf(freq, '\u00e9') == 1);
         } catch (UnsupportedOperationException e) {
             check("non-ASCII counting implemented", false);
             blocked(e);
@@ -193,6 +193,12 @@ public class CharacterFrequencyTest {
     }
 
     // --- helpers ---
+
+    /** Count for a character, or -1 when absent, so a missing key is a failed check and not an NPE. */
+    private static int countOf(Map<Character, Integer> freq, char c) {
+        Integer v = freq.get(c);
+        return v == null ? -1 : v;
+    }
 
     /** Returns the fully-qualified class name of the thrown throwable, or null if none was thrown. */
     private static String captureThrowable(Runnable body) {
