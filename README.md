@@ -211,6 +211,6 @@ on one machine — it is never presented as a complexity guarantee.
 - [x] All tests compile and pass with assertions enabled (184 assertions, 0 failures).
 - [x] `AGENT_LOG.md` records the student plan before Build edits were allowed.
 - [x] `out/`, credentials and generated files are excluded by `.gitignore`.
-- [x] Git repository, commit and push — **done**: `Lab7` on GitHub, branch `main`,
+- [x] Git repository, commit and push — **done**: `DSA_Lab7` on GitHub, branch `main`,
       one commit, `out/` and `node_modules/` excluded.
 - [ ] Audit checkpoint — **not started**.

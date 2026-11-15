@@ -1967,16 +1967,18 @@ checkpoint and are not rewritten after the fact.
 
 | Item | Value |
 |---|---|
-| GitHub repository | `lancebimbo-png/Lab7` |
+| GitHub repository | `lancebimbo-png/DSA_Lab7` |
 | Visibility | public |
 | Default branch | `main` |
-| Remote | `origin` → `https://github.com/lancebimbo-png/Lab7.git` |
-| Commits | 1 |
-| Local `origin` | created by `gh repo create` with `--source .` |
+| Remote | `origin` → `https://github.com/lancebimbo-png/DSA_Lab7.git` |
+| Commits | 2 |
+| Local `origin` | created by `gh repo create` with `--source .`, URL updated after the rename |
 
-The name `Lab7` is the one the student specified. The existing labs on this
-account use the `DSA_Lab<N>` prefix (`DSA_Lab1`…`DSA_Lab6`, `DSA_Lab8`), so
-`Lab7` is the one repository on the account whose name breaks that pattern.
+The repository was created as `Lab7`, the name the student first specified, and
+was then **renamed to `DSA_Lab7`** on the student's follow-up instruction, so
+that it matches the naming convention of the other labs on this account
+(`DSA_Lab1`…`DSA_Lab6`, `DSA_Lab8`). GitHub redirects the old URL, and the
+local `origin` was pointed at the new one.
 
 ### 16.2 Commands executed
 
@@ -1985,6 +1987,8 @@ git init -b main
 git add -A
 git commit -m "..."
 gh repo create Lab7 --public --source . --remote origin --push
+gh repo rename DSA_Lab7 --repo lancebimbo-png/Lab7 --yes
+git remote set-url origin https://github.com/lancebimbo-png/DSA_Lab7.git
 ```
 
 ### 16.3 What is committed, and what is not
@@ -2017,5 +2021,5 @@ searched for `password`, `secret`, `api_key`, `token`, `gho_` and
 | Test | Complete (§14) |
 | Build | Complete (§15) |
 | Audit | **Not started.** |
-| **Git** | **Complete.** Repository `Lab7` created on GitHub, `main` committed and pushed, 20 files tracked, `out/` and `node_modules/` excluded. |
+| **Git** | **Complete.** Repository `DSA_Lab7` created on GitHub (created as `Lab7`, then renamed to match the account's `DSA_Lab<N>` convention), `main` committed and pushed, 20 files tracked, `out/` and `node_modules/` excluded. |
 
